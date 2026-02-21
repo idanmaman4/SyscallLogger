@@ -1,0 +1,2 @@
+#define SYSCALLRECORDER_API __declspec(dllexport)
+#define SYSCALLRECORDER_API __declspec(dllimport)
