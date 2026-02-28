@@ -19,7 +19,6 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)ModuleIterator.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)StackUnwindIterator.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)structres.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)SymbolInformation.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)Module.cpp" />

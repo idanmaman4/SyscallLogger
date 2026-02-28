@@ -4,7 +4,8 @@
 #include "structres.h"
 #include "debug_utils.hpp"
 #include "StackUnwindIterator.hpp"
-
+#include <ShlObj.h>
+#include <wrl/client.h>
 #include <filesystem>
 #include <cstdint>
 #include <iostream>
@@ -25,12 +26,17 @@ struct process_instrumentation_callback_info_t {
 };
 
 
-
 std::wstring build_log_filename()
 {
+    // Get Documents folder path
+    wchar_t documents_path[MAX_PATH] = {};
+    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, documents_path)))
+    {
+        GetCurrentDirectoryW(MAX_PATH, documents_path);
+    }
+
     wchar_t exe_path[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
-
     std::wstring stem = std::filesystem::path(exe_path).stem().wstring();
 
     DWORD pid = GetCurrentProcessId();
@@ -45,7 +51,46 @@ std::wstring build_log_filename()
         st.wYear, st.wMonth, st.wDay,
         st.wHour, st.wMinute, st.wSecond);
 
-    return std::wstring(filename);
+    std::filesystem::path full_path = std::filesystem::path(documents_path) / filename;
+    return full_path.wstring();
+}
+
+void append_string_stream(std::wofstream& stream, const StackFrame& frame,size_t depth) {
+    if (depth == 0)
+    {
+        stream << L"  [" << depth << L"] " << frame.module_name << L"!"
+            << frame.function_name << L"(+"
+            << std::hex << frame.function_offset << L")\n";    
+    }
+    else
+    {
+        stream << L"  [" << depth << L"] "
+            << frame.module_name << L"!"
+            << frame.function_name << L"(+"
+            << std::hex << frame.function_offset << L")\n";
+    }
+}
+
+void debug_work(CONTEXT* context) {
+    int depth = 0;
+    for (const StackFrame& frame : StackUnwindRange{ context->Rip, context->Rsp } | std::views::take(MAX_COUNT))
+    {
+        if (debugging_utils::is_debug) {
+            append_string_stream(g_log_file, frame, depth);
+        }
+        ++depth;
+    }
+    g_log_file << L"\n";
+    g_log_file.flush();
+}
+
+void release_work(CONTEXT* context) {
+
+    for (const StackFrame& frame : StackUnwindRange{ context->Rip, context->Rsp } | std::views::take(MAX_COUNT))
+    {
+        g_log_file << frame.function_offset;    
+    }
+    g_log_file.flush();
 }
 
 void InstrumentationCallback(CONTEXT* context)
@@ -58,37 +103,15 @@ void InstrumentationCallback(CONTEXT* context)
     if (!teb->InstrumentationCallbackDisabled)
     {
         teb->InstrumentationCallbackDisabled = TRUE;
-        try {
-
-            int depth = 0;
-            std::wstringstream stream;
-            for (const StackFrame& frame : StackUnwindRange{ context->Rip, context->Rsp } | std::views::take(MAX_COUNT))
-            {
-                if (depth == 0)
-                {
-                    stream << L"  [" << depth << L"] " << frame.module_name << L"!"
-                        << frame.function_name << L"(+"
-                        << std::hex << frame.function_offset << L")"
-                        << L" rax=" << context->Rax << L"\n";
-                }
-                else
-                {
-                    stream << L"  [" << depth << L"] "
-                        << frame.module_name << L"!"
-                        << frame.function_name << L"(+"
-                        << std::hex << frame.function_offset << L")\n";
-                }
-                std::wstring_view module_name = frame.module_name;
-                if (module_name.ends_with(L".exe")) {
-                    break;
-                }
-                ++depth;
+        __try {
+            if (debugging_utils::is_debug) {
+                debug_work(context);
             }
-            g_log_file << stream.str();
-            g_log_file << L"\n";
-            g_log_file.flush();
+            else {
+                release_work(context);
+            }
         }
-        catch (...) {}
+        __except(EXCEPTION_EXECUTE_HANDLER) {}
         teb->InstrumentationCallbackDisabled = FALSE;
     }
 

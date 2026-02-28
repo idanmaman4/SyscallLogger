@@ -2,25 +2,24 @@
 #include "structres.h"
 #include "ModuleIterator.hpp"
 
-Module::Module(size_t base, ULONG size, _UNICODE_STRING_2* name) noexcept
-    : m_start(base), m_size(size), m_name(name)
+Module::Module(size_t base, ULONG size, _LDR_DATA_TABLE_ENTRY_2* ldr_entry) noexcept
+    : protection(ldr_entry), m_start(base), m_size(size), m_name(&ldr_entry->BaseDllName)
 {
 
 }
 
 std::optional<Module> Module::createModule(size_t rip) 
 {
-    for (const Module& module : ModuleRange{}) {
-        if(module.m_start <= rip && rip < module.end()) {
-          return std::move(*const_cast<Module*>(&module));
-		}
+    for (Module module : ModuleRange{}) {   // by value — build_current() gives fresh Module
+        if (module.m_start <= rip && rip < module.end())
+            return std::move(module);       // moves protection cleanly
     }
-
     return std::nullopt;
 }
 
 Module::Module(Module&& other) noexcept
-    : m_start      (other.m_start)
+    : protection (std::move(other.protection)) ,
+     m_start      (other.m_start)
     , m_size       (other.m_size)
     , m_name       (other.m_name)
 {
@@ -31,6 +30,7 @@ Module::Module(Module&& other) noexcept
 
 Module& Module::operator=(Module&& other) noexcept {
     if (this != &other) {
+        protection    = std::move(other.protection);
         m_start       = other.m_start;
         m_size        = other.m_size;
         m_name = other.m_name;
@@ -87,8 +87,11 @@ _UNICODE_STRING_2* Module::module_name() const
 std::optional<std::string> Module::find_rip_export(uintptr_t rip) const
 {
     RUNTIME_FUNCTION * rf = lookup_rf(rip);
-    uintptr_t function_va = m_start +  rf->BeginAddress;
-    return find_export(function_va);
+    if (rf) {
+        uintptr_t function_va = m_start + rf->BeginAddress;
+        return find_export(function_va);
+    }
+    return std::nullopt;
 }
 
 std::optional<std::string> Module::find_export(uintptr_t function_va) const

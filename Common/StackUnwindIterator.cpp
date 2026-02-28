@@ -2,9 +2,10 @@
 #include "Module.hpp"
 #include "ModuleIterator.hpp"
 #include "structres.h"
-
+#include "debug_utils.hpp"
 
 static bool do_unwind(uintptr_t module_start,
+                      uintptr_t module_end,
                       RUNTIME_FUNCTION* rf,
                       uintptr_t&        rsp,
                       uintptr_t&        rip) noexcept
@@ -12,9 +13,9 @@ static bool do_unwind(uintptr_t module_start,
     if (!rf)
         return false;
 
-    try {
+    __try {
+        if((module_start + rf->UnwindData) >= module_end) return false;
         const auto* ui = reinterpret_cast<const UnwindInfo*>(module_start + rf->UnwindData);
-
         for (;;) {
             UINT i = 0;
             while (i < ui->code_cnt) {
@@ -80,7 +81,7 @@ static bool do_unwind(uintptr_t module_start,
 
         return rip != 0 && rip != static_cast<uintptr_t>(-1);
     }
-    catch (...) {
+    __except(EXCEPTION_EXECUTE_HANDLER){
         return false;
     }
 }
@@ -97,14 +98,22 @@ void resolve_symbols(StackFrame& f) noexcept
     }
 
     f.module_base     = mod.value().m_start;
-    f.function_offset = f.rip - mod.value().m_start;
-    auto narrow = mod.value().find_rip_export(f.rip).value_or("UnknownSymbol");
-    f.function_name = std::wstring(narrow.begin(), narrow.end());
 
-    auto* us = mod.value().module_name();
-    if (us && us->Buffer && us->Length > 0)
-        f.module_name = std::wstring(us->Buffer, us->Length / sizeof(WCHAR));
-}
+    RUNTIME_FUNCTION * rf = mod.value().lookup_rf(f.rip);
+    if (rf) {
+        f.function_offset = rf->BeginAddress;
+    }
+
+    if (debugging_utils::is_debug) {
+        if (f.function_offset) {
+            auto narrow = mod.value().find_export(f.module_base + f.function_offset).value_or("?");
+            f.function_name = std::wstring(narrow.begin(), narrow.end());
+        }
+        auto* us = mod.value().module_name();
+        if (us && us->Buffer && us->Length > 0)
+            f.module_name = std::wstring(us->Buffer, us->Length / sizeof(WCHAR));
+    }
+ }
 
 
 bool unwind_step(StackFrame& f) noexcept
@@ -119,7 +128,7 @@ bool unwind_step(StackFrame& f) noexcept
                 uintptr_t new_rsp = f.rsp;
                 uintptr_t new_rip = 0;
 
-                if (!do_unwind(mod.value().m_start, rf, new_rsp, new_rip))
+                if (!do_unwind(mod.value().m_start, mod.value().end(), rf, new_rsp, new_rip))
                     return false;
 
                 f     = StackFrame{};
