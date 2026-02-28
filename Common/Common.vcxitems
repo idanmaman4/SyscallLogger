@@ -15,6 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)debug_utils.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)LdrRefrenceProtection.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)Module.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)ModuleIterator.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)StackUnwindIterator.hpp" />

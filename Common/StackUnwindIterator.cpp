@@ -18,6 +18,7 @@ static bool do_unwind(uintptr_t module_start,
         const auto* ui = reinterpret_cast<const UnwindInfo*>(module_start + rf->UnwindData);
         for (;;) {
             UINT i = 0;
+            if(ui->code_cnt > 256) return false;
             while (i < ui->code_cnt) {
                 const UnwindCode* uc = &ui->codes[i];
                 switch (static_cast<UwOp>(uc->op)) {
