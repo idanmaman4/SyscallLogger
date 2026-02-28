@@ -1,4 +1,60 @@
+#pragma once
 #include <windows.h>
+
+
+
+
+struct CV_INFO_PDB70 {
+    DWORD CvSignature; // "RSDS"
+    GUID  Signature;
+    DWORD Age;
+    BYTE  PdbFileName[1];
+};
+
+struct CV_INFO_PDB20 {
+    DWORD CvSignature; // "NB10"
+    LONG  Offset;
+    DWORD Signature;
+    DWORD Age;
+    BYTE  PdbFileName[1];
+};
+
+static constexpr DWORD CV_SIGNATURE_RSDS = 'SDSR';
+static constexpr DWORD CV_SIGNATURE_NB10 = '01BN';
+
+
+struct UnwindCode {
+    BYTE offset;
+    BYTE op      : 4;
+    BYTE op_info : 4;
+};
+
+struct UnwindInfo {
+    BYTE       version      : 3;
+    BYTE       flags        : 5;
+    BYTE       prolog;
+    BYTE       code_cnt;
+    BYTE       frame_reg    : 4;
+    BYTE       frame_offset : 4;
+    UnwindCode codes[1];
+};
+
+enum class UwOp : BYTE {
+    PushNonvol    = 0,
+    AllocLarge    = 1,
+    AllocSmall    = 2,
+    SetFpReg      = 3,
+    SaveNonvol    = 4,
+    SaveNonvolFar = 5,
+    SaveXmm128    = 8,
+    SaveXmm128Far = 9,
+    PushMachframe = 10,
+};
+
+static constexpr BYTE  k_chain_flag    = 0x04;
+static constexpr ULONG k_machframe     = 0x28;
+static constexpr ULONG k_machframe_err = 0x30;
+
 
 struct _STRING64_2
 {
@@ -12,6 +68,9 @@ struct _UNICODE_STRING_2
     USHORT MaximumLength;                                                   //0x2
     WCHAR* Buffer;                                                          //0x8
 }; 
+
+
+
 struct _TEB64
 {
     struct _NT_TIB64 NtTib;                                                 //0x0

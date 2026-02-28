@@ -14,6 +14,15 @@
     <ProjectCapability Include="SourceItemsFromImports" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)debug_utils.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)Module.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)ModuleIterator.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)StackUnwindIterator.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)structres.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)SymbolInformation.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)Module.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)StackUnwindIterator.cpp" />
   </ItemGroup>
 </Project>

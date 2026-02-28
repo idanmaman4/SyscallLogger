@@ -1,9 +1,3 @@
-// The following ifdef block is the standard way of creating macros which make exporting
-// from a DLL simpler. All files within this DLL are compiled with the SYSCALLRECORDER_EXPORTS
-// symbol defined on the command line. This symbol should not be defined on any project
-// that uses this DLL. This way any other project whose source files include this file see
-// SYSCALLRECORDER_API functions as being imported from a DLL, whereas this DLL sees symbols
-// defined with this macro as being exported.
 #ifdef SYSCALLRECORDER_EXPORTS
 #define SYSCALLRECORDER_API __declspec(dllexport)
 #else
@@ -48,9 +42,7 @@ struct LogEntry {
 };
 #pragma pack(pop)
 
-extern SYSCALLRECORDER_API int nSyscallRecorder;
 
-SYSCALLRECORDER_API int fnSyscallRecorder(void);
 bool register_instrumentation_callback();
 extern "C" void InstrumentationCallback(CONTEXT* context);
 extern "C" void InstrumentationCallbackThunk();
