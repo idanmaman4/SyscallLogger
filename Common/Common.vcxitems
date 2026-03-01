@@ -15,14 +15,20 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)debug_utils.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)InstrumentaionCallbackProtection.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)LdrRefrenceProtection.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)LogInfo.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)Module.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)ModuleIterator.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)ModuleManager.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)StackUnwindIterator.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)structres.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)FastInformationUtils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)InstrumentaionCallbackProtection.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)Module.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)ModuleManager.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)StackUnwindIterator.cpp" />
   </ItemGroup>
 </Project>

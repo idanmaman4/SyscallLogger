@@ -1,23 +1,8 @@
 #pragma once
 #include <windows.h>
 
+#define PROCESSOR_FEATURE_MAX 64
 
-
-
-struct CV_INFO_PDB70 {
-    DWORD CvSignature; // "RSDS"
-    GUID  Signature;
-    DWORD Age;
-    BYTE  PdbFileName[1];
-};
-
-struct CV_INFO_PDB20 {
-    DWORD CvSignature; // "NB10"
-    LONG  Offset;
-    DWORD Signature;
-    DWORD Age;
-    BYTE  PdbFileName[1];
-};
 
 static constexpr DWORD CV_SIGNATURE_RSDS = 'SDSR';
 static constexpr DWORD CV_SIGNATURE_NB10 = '01BN';
@@ -62,6 +47,7 @@ struct _STRING64_2
     USHORT MaximumLength;                                                   //0x2
     ULONGLONG Buffer;                                                       //0x8
 };
+
 struct _UNICODE_STRING_2
 {
     USHORT Length;                                                          //0x0
@@ -70,12 +56,16 @@ struct _UNICODE_STRING_2
 }; 
 
 
-
+struct _CLIENT_ID64
+{
+    ULONGLONG UniqueProcess;                                                //0x0
+    ULONGLONG UniqueThread;                                                 //0x8
+}; 
 struct _TEB64
 {
     struct _NT_TIB64 NtTib;                                                 //0x0
     ULONGLONG EnvironmentPointer;                                           //0x38
-    BYTE padding0[0x10];
+    _CLIENT_ID64 client_id;												    //0x40   
     ULONGLONG ActiveRpcHandle;                                              //0x50
     ULONGLONG ThreadLocalStoragePointer;                                    //0x58
     ULONGLONG ProcessEnvironmentBlock;                                      //0x60
@@ -337,9 +327,6 @@ struct _PEB64_2
 };
 
 
-
-
-//0x58 bytes (sizeof)
 struct _PEB_LDR_DATA_2
 {
     ULONG Length;                                                           //0x0
@@ -376,8 +363,8 @@ struct _LDR_DATA_TABLE_ENTRY_2
     struct _LDRP_LOAD_CONTEXT* LoadContext;                                 //0xb0
     VOID* ParentDllBase;                                                    //0xb8
     VOID* SwitchBackContext;                                                //0xc0
-    BYTE padding1[24];        //0xc8
-    BYTE padding2[24];                       //0xe0
+    BYTE padding1[24];        
+    BYTE padding2[24];                       
     ULONGLONG OriginalBase;                                                 //0xf8
     union _LARGE_INTEGER LoadTime;                                          //0x100
     ULONG BaseNameHashValue;                                                //0x108
@@ -389,4 +376,213 @@ struct _LDR_DATA_TABLE_ENTRY_2
     ULONG CheckSum;                                                         //0x120
     VOID* ActivePatchImageBase;                                             //0x128
     enum _LDR_HOT_PATCH_STATE HotPatchState;                                //0x130
+};
+
+
+enum class LdrLoadReason : ULONG{
+    LDR_DLL_NOTIFICATION_REASON_LOADED = 1,
+    LDR_DLL_NOTIFICATION_REASON_UNLOADED = 2
+
+};
+
+
+typedef struct _LDR_DLL_UNLOADED_NOTIFICATION_DATA {
+    ULONG Flags;
+    _UNICODE_STRING_2* FullDllName;
+    _UNICODE_STRING_2* BaseDllName;
+    PVOID DllBase;
+    ULONG SizeOfImage;
+} LDR_DLL_UNLOADED_NOTIFICATION_DATA, *PLDR_DLL_UNLOADED_NOTIFICATION_DATA;
+
+typedef struct _LDR_DLL_LOADED_NOTIFICATION_DATA {
+    ULONG Flags;
+    _UNICODE_STRING_2* FullDllName;
+    _UNICODE_STRING_2* BaseDllName;
+    PVOID DllBase;
+    ULONG SizeOfImage;
+} LDR_DLL_LOADED_NOTIFICATION_DATA, *PLDR_DLL_LOADED_NOTIFICATION_DATA;
+
+typedef union _LDR_DLL_NOTIFICATION_DATA {
+    LDR_DLL_LOADED_NOTIFICATION_DATA Loaded;
+    LDR_DLL_UNLOADED_NOTIFICATION_DATA Unloaded;
+} LDR_DLL_NOTIFICATION_DATA, *PLDR_DLL_NOTIFICATION_DATA;
+
+using LdrDllNotification_t = VOID (CALLBACK)(
+    _In_     ULONG                      NotificationReason,
+    _In_     LDR_DLL_NOTIFICATION_DATA* NotificationData,
+    _In_opt_ PVOID                      Context
+);
+
+using LdrRegisterDllNotification_t = NTSTATUS (NTAPI)(
+    _In_     ULONG                  Flags,
+    _In_     LdrDllNotification_t*  NotificationFunction,
+    _In_opt_ PVOID                  Context,
+    _Out_    PVOID*                 Cookie
+);
+
+
+typedef struct _KSYSTEM_TIME
+{
+     ULONG LowPart;
+     LONG High1Time;
+     LONG High2Time;
+} KSYSTEM_TIME, *PKSYSTEM_TIME;
+
+typedef enum _NT_PRODUCT_TYPE
+{
+         NtProductWinNt = 1,
+         NtProductLanManNt = 2,
+         NtProductServer = 3
+} NT_PRODUCT_TYPE;
+
+typedef enum _ALTERNATIVE_ARCHITECTURE_TYPE
+{
+         StandardDesign = 0,
+         NEC98x86 = 1,
+         EndAlternatives = 2
+} ALTERNATIVE_ARCHITECTURE_TYPE;
+
+typedef struct _KUSER_SHARED_DATA {
+  ULONG                         TickCountLowDeprecated;
+  ULONG                         TickCountMultiplier;
+  KSYSTEM_TIME                  InterruptTime;
+  KSYSTEM_TIME                  SystemTime;
+  KSYSTEM_TIME                  TimeZoneBias;
+  USHORT                        ImageNumberLow;
+  USHORT                        ImageNumberHigh;
+  WCHAR                         NtSystemRoot[260];
+  ULONG                         MaxStackTraceDepth;
+  ULONG                         CryptoExponent;
+  ULONG                         TimeZoneId;
+  ULONG                         LargePageMinimum;
+  ULONG                         AitSamplingValue;
+  ULONG                         AppCompatFlag;
+  ULONGLONG                     RNGSeedVersion;
+  ULONG                         GlobalValidationRunlevel;
+  LONG                          TimeZoneBiasStamp;
+  ULONG                         NtBuildNumber;
+  NT_PRODUCT_TYPE               NtProductType;
+  BOOLEAN                       ProductTypeIsValid;
+  BOOLEAN                       Reserved0[1];
+  USHORT                        NativeProcessorArchitecture;
+  ULONG                         NtMajorVersion;
+  ULONG                         NtMinorVersion;
+  BOOLEAN                       ProcessorFeatures[PROCESSOR_FEATURE_MAX];
+  ULONG                         Reserved1;
+  ULONG                         Reserved3;
+  ULONG                         TimeSlip;
+  ALTERNATIVE_ARCHITECTURE_TYPE AlternativeArchitecture;
+  ULONG                         BootId;
+  LARGE_INTEGER                 SystemExpirationDate;
+  ULONG                         SuiteMask;
+  BOOLEAN                       KdDebuggerEnabled;
+  union {
+    UCHAR MitigationPolicies;
+    struct {
+      UCHAR NXSupportPolicy : 2;
+      UCHAR SEHValidationPolicy : 2;
+      UCHAR CurDirDevicesSkippedForDlls : 2;
+      UCHAR Reserved : 2;
+    };
+  };
+  USHORT                        CyclesPerYield;
+  ULONG                         ActiveConsoleId;
+  ULONG                         DismountCount;
+  ULONG                         ComPlusPackage;
+  ULONG                         LastSystemRITEventTickCount;
+  ULONG                         NumberOfPhysicalPages;
+  BOOLEAN                       SafeBootMode;
+  union {
+    UCHAR VirtualizationFlags;
+    struct {
+      UCHAR ArchStartedInEl2 : 1;
+      UCHAR QcSlIsSupported : 1;
+    };
+  };
+  UCHAR                         Reserved12[2];
+  union {
+    ULONG SharedDataFlags;
+    struct {
+      ULONG DbgErrorPortPresent : 1;
+      ULONG DbgElevationEnabled : 1;
+      ULONG DbgVirtEnabled : 1;
+      ULONG DbgInstallerDetectEnabled : 1;
+      ULONG DbgLkgEnabled : 1;
+      ULONG DbgDynProcessorEnabled : 1;
+      ULONG DbgConsoleBrokerEnabled : 1;
+      ULONG DbgSecureBootEnabled : 1;
+      ULONG DbgMultiSessionSku : 1;
+      ULONG DbgMultiUsersInSessionSku : 1;
+      ULONG DbgStateSeparationEnabled : 1;
+      ULONG SpareBits : 21;
+    } DUMMYSTRUCTNAME2;
+  } DUMMYUNIONNAME2;
+  ULONG                         DataFlagsPad[1];
+  ULONGLONG                     TestRetInstruction;
+  LONGLONG                      QpcFrequency;
+  ULONG                         SystemCall;
+  ULONG                         Reserved2;
+  ULONGLONG                     FullNumberOfPhysicalPages;
+  ULONGLONG                     SystemCallPad[1];
+  union {
+    KSYSTEM_TIME TickCount;
+    ULONG64      TickCountQuad;
+    struct {
+      ULONG ReservedTickCountOverlay[3];
+      ULONG TickCountPad[1];
+    } DUMMYSTRUCTNAME;
+  } DUMMYUNIONNAME3;
+  ULONG                         Cookie;
+  ULONG                         CookiePad[1];
+  LONGLONG                      ConsoleSessionForegroundProcessId;
+  ULONGLONG                     TimeUpdateLock;
+  ULONGLONG                     BaselineSystemTimeQpc;
+  ULONGLONG                     BaselineInterruptTimeQpc;
+  ULONGLONG                     QpcSystemTimeIncrement;
+  ULONGLONG                     QpcInterruptTimeIncrement;
+  UCHAR                         QpcSystemTimeIncrementShift;
+  UCHAR                         QpcInterruptTimeIncrementShift;
+  USHORT                        UnparkedProcessorCount;
+  ULONG                         EnclaveFeatureMask[4];
+  ULONG                         TelemetryCoverageRound;
+  USHORT                        UserModeGlobalLogger[16];
+  ULONG                         ImageFileExecutionOptions;
+  ULONG                         LangGenerationCount;
+  ULONGLONG                     Reserved4;
+  ULONGLONG                     InterruptTimeBias;
+  ULONGLONG                     QpcBias;
+  ULONG                         ActiveProcessorCount;
+  UCHAR                         ActiveGroupCount;
+  UCHAR                         Reserved9;
+  union {
+    USHORT QpcData;
+    struct {
+      UCHAR QpcBypassEnabled;
+      UCHAR QpcReserved;
+    };
+  };
+  LARGE_INTEGER                 TimeZoneBiasEffectiveStart;
+  LARGE_INTEGER                 TimeZoneBiasEffectiveEnd;
+  XSTATE_CONFIGURATION          XState;
+  KSYSTEM_TIME                  FeatureConfigurationChangeStamp;
+  ULONG                         Spare;
+  ULONG64                       UserPointerAuthMask;
+  XSTATE_CONFIGURATION          XStateArm64;
+  ULONG                         Reserved10[210];
+} KUSER_SHARED_DATA, *PKUSER_SHARED_DATA;
+
+
+struct CV_INFO_PDB70 {
+    DWORD CvSignature;
+    GUID  Signature;
+    DWORD Age;
+    BYTE  PdbFileName[1];
+};
+
+struct CV_INFO_PDB20 {
+    DWORD CvSignature;
+    LONG  Offset;
+    DWORD Signature;
+    DWORD Age;
+    BYTE  PdbFileName[1];
 };

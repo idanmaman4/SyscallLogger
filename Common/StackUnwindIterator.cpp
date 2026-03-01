@@ -3,6 +3,8 @@
 #include "ModuleIterator.hpp"
 #include "structres.h"
 #include "debug_utils.hpp"
+#include <wchar.h>
+
 
 static bool do_unwind(uintptr_t module_start,
                       uintptr_t module_end,
@@ -90,31 +92,38 @@ static bool do_unwind(uintptr_t module_start,
 
 void resolve_symbols(StackFrame& f) noexcept
 {
-    std::optional<Module> mod = Module::createModule(f.rip);
 
-    if (!mod.has_value()) {
-        f.module_base     = 0;
-        f.function_offset = 0;
-        return;
-    }
 
-    f.module_base     = mod.value().m_start;
+    for (Module module : ModuleRange{}) {
+        if (module.m_start <= f.rip && f.rip < module.end()) {
+            f.module_base = module.m_start;
 
-    RUNTIME_FUNCTION * rf = mod.value().lookup_rf(f.rip);
-    if (rf) {
-        f.function_offset = rf->BeginAddress;
-    }
+            RUNTIME_FUNCTION* rf = module.lookup_rf(f.rip);
+            if (rf) {
+                f.function_offset = rf->BeginAddress;
+            }
 
-    if (debugging_utils::is_debug) {
-        if (f.function_offset) {
-            auto narrow = mod.value().find_export(f.module_base + f.function_offset).value_or("?");
-            f.function_name = std::wstring(narrow.begin(), narrow.end());
+            if (debugging_utils::is_debug) {
+                if (f.function_offset) {
+                   module.find_export(f.module_base + f.function_offset, f.function_name, ARRAYSIZE(f.function_name));
+                }
+                std::memcpy(
+                    f.module_name,
+                    module.m_name,
+                    min(sizeof(module.m_name), sizeof(f.module_name)));
+                
+
+            }
+            return;
         }
-        auto* us = mod.value().module_name();
-        if (us && us->Buffer && us->Length > 0)
-            f.module_name = std::wstring(us->Buffer, us->Length / sizeof(WCHAR));
     }
- }
+    
+
+   
+    f.module_base     = 0;
+    f.function_offset = 0;
+    return;
+}
 
 
 bool unwind_step(StackFrame& f) noexcept

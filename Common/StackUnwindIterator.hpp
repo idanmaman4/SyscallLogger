@@ -10,8 +10,8 @@ struct StackFrame
     uintptr_t rsp             = 0;
     uintptr_t module_base     = 0;
     uintptr_t function_offset = 0;
-    std::wstring     module_name;
-    std::wstring    function_name;
+    wchar_t     module_name[32];
+    wchar_t    function_name[32];
 
     [[nodiscard]] bool valid() const noexcept
     {
@@ -32,10 +32,8 @@ public:
     using pointer           = const StackFrame*;
     using reference         = const StackFrame&;
 
-    // End sentinel
     StackUnwindIterator() noexcept = default;
 
-    // Begin — resolves symbols for the first frame immediately
     explicit StackUnwindIterator(uintptr_t rip, uintptr_t rsp) noexcept
         : done_(rip == 0 || rip == static_cast<uintptr_t>(-1))
     {
@@ -48,7 +46,6 @@ public:
     [[nodiscard]] reference operator*()  const noexcept { return frame_;  }
     [[nodiscard]] pointer   operator->() const noexcept { return &frame_; }
 
-    // Prefix ++
     StackUnwindIterator& operator++() noexcept
     {
         if (!done_)
@@ -56,7 +53,6 @@ public:
         return *this;
     }
 
-    // Postfix ++
     StackUnwindIterator operator++(int) noexcept
     {
         auto tmp = *this;
@@ -64,12 +60,11 @@ public:
         return tmp;
     }
 
-    // Two iterators are equal when both are done (end == end)
-    // or both are at the same rip (handles self-comparison)
+   
     [[nodiscard]] bool operator==(const StackUnwindIterator& rhs) const noexcept
     {
         if (done_ != rhs.done_) return false;
-        if (done_)              return true;   // both are end sentinels
+        if (done_)              return true;  
         return frame_.rip == rhs.frame_.rip &&
                frame_.rsp == rhs.frame_.rsp;
     }
@@ -79,7 +74,6 @@ private:
     bool       done_ = true;
 };
 
-// Satisfies std::ranges::range — use in range-for or std::ranges algorithms
 struct StackUnwindRange
 {
     uintptr_t start_rip;
@@ -96,5 +90,4 @@ struct StackUnwindRange
     }
 };
 
-// Concept check — enforces the range contract at compile time
 static_assert(std::input_iterator<StackUnwindIterator>);

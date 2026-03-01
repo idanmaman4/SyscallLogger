@@ -9,11 +9,19 @@
 
 
 
+
 class Module {
 public:
+
+    struct PdbInfo
+    {
+        _GUID       guid;
+        const char* pdb_name = nullptr;
+    };
+
     size_t       m_start    = 0;
     size_t       m_size     = 0;
-    std::optional<_UNICODE_STRING_2*> m_name;
+    wchar_t m_name[32] = {0};
 
     Module() = delete;
     Module(size_t base, ULONG size, _LDR_DATA_TABLE_ENTRY_2* ldr_table_entry = nullptr) noexcept;
@@ -32,11 +40,12 @@ public:
 
     [[nodiscard]] RUNTIME_FUNCTION* lookup_rf(uintptr_t rip) const;
 
-    [[nodiscard]]  _UNICODE_STRING_2* module_name() const;
+    [[nodiscard]]bool find_rip_export(uintptr_t rip, wchar_t* string, size_t string_size) const;
 
-    [[nodiscard]]std::optional<std::string> find_rip_export(uintptr_t rip) const;
+    [[nodiscard]]bool find_export(uintptr_t function_va, wchar_t* string, size_t string_size) const;
 
-    [[nodiscard]]std::optional<std::string> find_export(uintptr_t function_va) const;
+    [[nodiscard]] static std::optional<PdbInfo> get_pdb_info(uintptr_t module_base);
+   
 
 private: 
     LdrRefrenceProtection protection;
