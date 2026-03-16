@@ -218,20 +218,21 @@ void debug_work(CONTEXT* context)
 
 void release_work(CONTEXT* context)
 {
-   
-    for (const StackFrame& frame :
+   LogInfoNewSyscall new_syscall(FastInformationUtils::get_tid(), FastInformationUtils::get_time());
+   size_t i=0; 
+   for (const StackFrame& frame :
          StackUnwindRange{ context->Rip, context->Rsp }
              | std::views::take(MAX_COUNT))
     {
-       
+       new_syscall.frames[i].module_base = frame.module_base;
+       new_syscall.frames[i].stack_trace_offsets = frame.function_offset;
+       i+=1;
+
     }
+   new_syscall.frames_count = i;
+   g_log_file.write(reinterpret_cast<char*>(&new_syscall), 
+                    offsetof(LogInfoNewSyscall,frames) + i * sizeof(SyscallFrameInfo));
     g_log_file.flush();
-}
-
-
-void check_for_function_hook(uintptr_t rip) {
-    // doing hook stuff...(TO DO : make smart logic);
-
 }
 
 
@@ -243,19 +244,14 @@ void InstrumentationCallback(CONTEXT* context)
     context->Rcx = context->R10;
 
     if (!teb->InstrumentationCallbackDisabled
-        && GetCurrentThreadId() != g_printer_thread_id)
+        && FastInformationUtils::get_tid()  != g_printer_thread_id)
     {
-        teb->InstrumentationCallbackDisabled = TRUE;
-        __try {
-            if (debugging_utils::is_debug)
-                debug_work(context);
-            else
-                release_work(context);
-        }
-        __except(EXCEPTION_EXECUTE_HANDLER) {}
-        teb->InstrumentationCallbackDisabled = FALSE;
+        InstrumentaionCallbackProtection protection;
+        if (debugging_utils::is_debug)
+            debug_work(context);
+        else
+            release_work(context);
     }
-
     RtlRestoreContext(context, NULL);
 }
 
@@ -263,16 +259,18 @@ void InstrumentationCallback(CONTEXT* context)
 std::wstring build_log_filename()
 {
     wchar_t documents_path[MAX_PATH] = {};
-    if (FAILED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr,
-                reinterpret_cast<PWSTR*>(&documents_path))))
+    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, documents_path)))
+    {
         GetCurrentDirectoryW(MAX_PATH, documents_path);
+    }
 
     wchar_t exe_path[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
     std::wstring stem = std::filesystem::path(exe_path).stem().wstring();
 
-    DWORD      pid = GetCurrentProcessId();
-    SYSTEMTIME st  = {};
+    DWORD pid = GetCurrentProcessId();
+
+    SYSTEMTIME st = {};
     GetLocalTime(&st);
 
     wchar_t filename[MAX_PATH] = {};
@@ -282,7 +280,8 @@ std::wstring build_log_filename()
         st.wYear, st.wMonth, st.wDay,
         st.wHour, st.wMinute, st.wSecond);
 
-    return (std::filesystem::path(documents_path) / filename).wstring();
+    std::filesystem::path full_path = std::filesystem::path(documents_path) / filename;
+    return full_path.wstring();
 }
 
 
@@ -293,12 +292,10 @@ bool register_instrumentation_callback()
             return false;
         g_log_file.set_rdbuf(std::cout.rdbuf());
     }
+    
     else {
         std::wstring filename = build_log_filename();
-        g_log_file.open(filename,
-            std::ios::out | std::ios::trunc | std::ios::binary);
-        if (!g_log_file.is_open())
-            return false;
+        g_log_file.open(filename,std::ios::out | std::ios::trunc );
     }
 
     module_manager.start_managing();

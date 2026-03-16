@@ -5,8 +5,9 @@
 
 int main()
 {
+    HMODULE self_delete_library = LoadLibraryA("SyscallRecorder.dll");
+
     for (size_t i = 0;; i++) {
-        HMODULE self_delete_library = LoadLibraryA("SyscallRecorder.dll");
         std::puts("Phase1.1");
         FreeLibrary(LoadLibraryA("advapi32.dll"));
         std::puts("Phase1.2");

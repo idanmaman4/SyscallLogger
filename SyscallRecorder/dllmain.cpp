@@ -19,7 +19,6 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         register_instrumentation_callback();
         break;
     case DLL_THREAD_ATTACH:
-        break;
     case DLL_THREAD_DETACH:
     case DLL_PROCESS_DETACH:
         break;

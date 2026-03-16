@@ -9,7 +9,7 @@ static constexpr size_t MAX_COUNT = 20 ;
 
 enum class LogType : byte {
 	NewModule = 1, 
-	SyscallCreated = 2,
+	SyscallCreated = 0x33,
 	NewThread = 3,
 	NewProcess = 4,
 };
@@ -41,6 +41,7 @@ struct SyscallFrameInfo {
 
 struct LogInfoNewSyscall {
 	LogHeader m_header;
+	uint32_t frames_count = 0;
 	SyscallFrameInfo frames[MAX_COUNT] = {0};
 	LogInfoNewSyscall(DWORD tid, uint64_t time) :m_header(LogType::SyscallCreated, time, tid) {
 	
