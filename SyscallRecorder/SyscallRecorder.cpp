@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "framework.h"
 #include "SyscallRecorder.h"
 #include "structres.h"
@@ -18,7 +18,8 @@
 #include "InstrumentaionCallbackProtection.h"
 #include "FastInformationUtils.h"
 
-Concurrency::concurrent_queue<LogEntry> log_queue;
+// ── global log queue (defined here, declared extern in LogInfo.h) ──
+Concurrency::concurrent_queue<LogBuffer> g_log_queue;
 
 static std::ofstream g_log_file;
 static ModuleManager module_manager(g_log_file);
@@ -166,6 +167,58 @@ static void stop_printer_thread() noexcept
     g_printer_thread = nullptr;
 }
 
+// ── writer thread (release-mode sink) ──────────────────────────────
+
+static HANDLE            g_writer_thread    = nullptr;
+static DWORD             g_writer_thread_id = 0;
+static std::atomic<bool> g_writer_stop      { false };
+
+static DWORD WINAPI writer_thread_proc(LPVOID) noexcept
+{
+    InstrumentaionCallbackProtection protection;
+
+    while (!g_writer_stop.load(std::memory_order_acquire)) {
+        LogBuffer buf;
+        bool found = false;
+        while (g_log_queue.try_pop(buf)) {
+            g_log_file.write(buf.data, buf.size);
+            found = true;
+        }
+        if (found)
+            g_log_file.flush();
+        else
+            SwitchToThread();
+    }
+
+    // drain remaining entries
+    LogBuffer buf;
+    while (g_log_queue.try_pop(buf))
+        g_log_file.write(buf.data, buf.size);
+    g_log_file.flush();
+
+    return 0;
+}
+
+static bool start_writer_thread() noexcept
+{
+    g_writer_thread = CreateThread(
+        nullptr, 0,
+        writer_thread_proc,
+        nullptr,
+        0,
+        &g_writer_thread_id);
+    return g_writer_thread != nullptr;
+}
+
+static void stop_writer_thread() noexcept
+{
+    if (!g_writer_thread) return;
+    g_writer_stop.store(true, std::memory_order_release);
+    WaitForSingleObject(g_writer_thread, 5000);
+    CloseHandle(g_writer_thread);
+    g_writer_thread = nullptr;
+}
+
 
 static size_t append_string_stream(const StackFrame& frame, size_t depth,
                                     wchar_t* buf, size_t remaining) noexcept
@@ -218,21 +271,23 @@ void debug_work(CONTEXT* context)
 
 void release_work(CONTEXT* context)
 {
-   LogInfoNewSyscall new_syscall(FastInformationUtils::get_tid(), FastInformationUtils::get_time());
-   size_t i=0; 
-   for (const StackFrame& frame :
+    LogBuffer buf{};
+    auto* sc = new (buf.data) LogInfoNewSyscall(
+        FastInformationUtils::get_tid(), FastInformationUtils::get_time());
+
+    size_t i = 0;
+    for (const StackFrame& frame :
          StackUnwindRange{ context->Rip, context->Rsp }
              | std::views::take(MAX_COUNT))
     {
-       new_syscall.frames[i].module_base = frame.module_base;
-       new_syscall.frames[i].stack_trace_offsets = frame.function_offset;
-       i+=1;
-
+        sc->frames[i].module_base         = frame.module_base;
+        sc->frames[i].stack_trace_offsets  = frame.function_offset;
+        ++i;
     }
-   new_syscall.frames_count = i;
-   g_log_file.write(reinterpret_cast<char*>(&new_syscall), 
-                    offsetof(LogInfoNewSyscall,frames) + i * sizeof(SyscallFrameInfo));
-    g_log_file.flush();
+    sc->frames_count = static_cast<uint32_t>(i);
+    buf.size = static_cast<uint16_t>(
+        offsetof(LogInfoNewSyscall, frames) + i * sizeof(SyscallFrameInfo));
+    g_log_queue.push(buf);
 }
 
 
@@ -244,7 +299,8 @@ void InstrumentationCallback(CONTEXT* context)
     context->Rcx = context->R10;
 
     if (!teb->InstrumentationCallbackDisabled
-        && FastInformationUtils::get_tid()  != g_printer_thread_id)
+        && FastInformationUtils::get_tid()  != g_printer_thread_id
+        && FastInformationUtils::get_tid()  != g_writer_thread_id)
     {
         InstrumentaionCallbackProtection protection;
         if (debugging_utils::is_debug)
@@ -292,10 +348,12 @@ bool register_instrumentation_callback()
             return false;
         g_log_file.set_rdbuf(std::cout.rdbuf());
     }
-    
+
     else {
         std::wstring filename = build_log_filename();
-        g_log_file.open(filename,std::ios::out | std::ios::trunc );
+        g_log_file.open(filename, std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!start_writer_thread())
+            return false;
     }
 
     module_manager.start_managing();

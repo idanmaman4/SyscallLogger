@@ -10,13 +10,19 @@
 void ModuleManager::log_module_info_record(std::ofstream& stream, uintptr_t modulebase) {
 	std::optional<Module::PdbInfo> pdb_info = Module::get_pdb_info(modulebase);
 	if (pdb_info.has_value()) {
-		{
-			LogInfoNewModule loginfo(pdb_info.value().pdb_name,
-				pdb_info.value().guid,
-				FastInformationUtils::get_time(),
-				FastInformationUtils::get_tid());
-			stream.write(reinterpret_cast<const char*>(&loginfo), sizeof(loginfo));
-		}
+		LogInfoNewModule loginfo(modulebase,
+			pdb_info.value().pdb_name,
+			pdb_info.value().guid,
+			FastInformationUtils::get_time(),
+			FastInformationUtils::get_tid());
+#ifdef SYSCALLRECORDER_EXPORTS
+		LogBuffer buf{};
+		memcpy(buf.data, &loginfo, sizeof(loginfo));
+		buf.size = sizeof(LogInfoNewModule);
+		g_log_queue.push(buf);
+#else
+		stream.write(reinterpret_cast<const char*>(&loginfo), sizeof(loginfo));
+#endif
 	}
 }
 
@@ -40,7 +46,7 @@ void ModuleManager::log_module_info_debug_unload(std::ofstream& stream, uintptr_
 
 ModuleManager::ModuleManager(std::ofstream& output_file) : m_output_file(output_file)
 {
-	
+
 }
 
 void ModuleManager::start_managing()
@@ -80,24 +86,23 @@ ModuleManager::~ModuleManager() {
 
 void ModuleManager::caching_update_handler(ULONG NotificationReason, LDR_DLL_NOTIFICATION_DATA* NotificationData, ModuleManager* Context)
 {
-	InstrumentaionCallbackProtection protection();
+	InstrumentaionCallbackProtection protection;
 
 	switch (NotificationReason) {
 
 	case static_cast<ULONG>(LdrLoadReason::LDR_DLL_NOTIFICATION_REASON_LOADED):
 			if (debugging_utils::is_debug) {
-				log_module_info_debug(Context->m_output_file, reinterpret_cast<uintptr_t>(NotificationData->Loaded.DllBase));	
+				log_module_info_debug(Context->m_output_file, reinterpret_cast<uintptr_t>(NotificationData->Loaded.DllBase));
 			}
 			else {
-				log_module_info_record(Context->m_output_file, reinterpret_cast<uintptr_t>(NotificationData->Loaded.DllBase));			
+				log_module_info_record(Context->m_output_file, reinterpret_cast<uintptr_t>(NotificationData->Loaded.DllBase));
 			}
 			break;
 		case static_cast<ULONG>(LdrLoadReason::LDR_DLL_NOTIFICATION_REASON_UNLOADED):
 			if (debugging_utils::is_debug) {
-				log_module_info_debug_unload(Context->m_output_file, reinterpret_cast<uintptr_t>(NotificationData->Unloaded.DllBase));	
+				log_module_info_debug_unload(Context->m_output_file, reinterpret_cast<uintptr_t>(NotificationData->Unloaded.DllBase));
 
 			}
 			break;
 	}
 }
-

@@ -4,11 +4,10 @@
 #include "Windows.h"
 #include "cstring"
 #include <cinttypes>
-
-static constexpr size_t MAX_COUNT = 20 ; 
+static constexpr size_t MAX_COUNT = 20 ;
 
 enum class LogType : byte {
-	NewModule = 1, 
+	NewModule = 1,
 	SyscallCreated = 0x33,
 	NewThread = 3,
 	NewProcess = 4,
@@ -26,9 +25,10 @@ struct LogHeader {
 struct LogInfoNewModule
 {
 	LogHeader m_header;
+	uintptr_t m_base;
 	char m_pdb_name[256] = { 0 };
 	_GUID m_guid;
-	LogInfoNewModule(const char* pdb, const _GUID& g, uint64_t time, DWORD tid) : m_guid(g), m_header(LogType::NewModule, time, tid)
+	LogInfoNewModule(uintptr_t base, const char* pdb, const _GUID& g, uint64_t time, DWORD tid) : m_base(base), m_guid(g), m_header(LogType::NewModule, time, tid)
 	{
 		strncpy_s(m_pdb_name, pdb, sizeof(m_pdb_name) - 1);
 	}
@@ -44,11 +44,11 @@ struct LogInfoNewSyscall {
 	uint32_t frames_count = 0;
 	SyscallFrameInfo frames[MAX_COUNT] = {0};
 	LogInfoNewSyscall(DWORD tid, uint64_t time) :m_header(LogType::SyscallCreated, time, tid) {
-	
+
 	}
-	
+
 };
- 
+
 struct LogInfoNewThread {
 	LogHeader m_header;
 	LogInfoNewThread(DWORD tid, uint64_t time) :  m_header(LogType::NewThread, time, tid)
@@ -65,3 +65,14 @@ struct LogInfoNewProcess {
 };
 
 #pragma pack(pop)
+
+#ifdef SYSCALLRECORDER_EXPORTS
+#include <concurrent_queue.h>
+
+struct LogBuffer {
+	char data[320];
+	uint16_t size;
+};
+
+extern Concurrency::concurrent_queue<LogBuffer> g_log_queue;
+#endif
